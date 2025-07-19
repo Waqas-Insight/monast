@@ -1,0 +1,335 @@
+#Setup Monast on Debian OS with help of docker
+
+  # Complete Monast Installation Guide with Docker CentOS 7
+
+This guide will walk you through installing Monast (network monitoring tool) using Docker with CentOS 7, resolving all Python 2.7 dependencies.
+
+## Prerequisites
+- Docker installed on your host system
+- Internet connection for downloading packages
+
+---
+
+## Step 1: Install Docker (if not already installed)
+
+### On Debian/Ubuntu:
+## Step 4: Install System Dependencies
+
+```bash
+sudo apt update
+sudo apt install apt-transport-https ca-certificates curl gnupg lsb-release
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install docker-ce docker-ce-cli containerd.io
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+### Test Docker:
+```bash
+docker --version
+docker run hello-world
+```
+
+---
+
+## Step 2: Pull and Run CentOS 7 Container
+
+## Step 2: Pull and Run CentOS 7 Container
+
+    # Pull CentOS 7 image
+    docker pull centos:7
+
+    # Run container with port mapping for web access and SSH
+    docker run -d --name monast-server -p 8080:80 -p 2222:22 -v $(pwd):/app centos:7 tail -f /dev/null
+
+    # Enter the container
+    docker exec -it monast-server bash
+
+**💡 Tip:** The `-v $(pwd):/app` mounts your current directory to `/app` in the container for easy file transfer.
+
+---
+
+## Step 3: Fix CentOS 7 Repository Issues
+
+**⚠️ Important:** CentOS 7 reached End of Life, so we need to fix the repositories first:
+
+```bash
+# Fix CentOS 7 repositories to use vault.centos.org
+sed -i -e '/^mirrorlist/d;/^#baseurl=/{s,^#,,;s,/mirror,/vault,;}' /etc/yum.repos.d/CentOS*.repo
+
+# Clear yum cache
+yum clean all
+
+# Update system
+yum update -y
+
+# Install development tools and Python 2.7
+yum groupinstall -y "Development Tools"
+yum install -y python python-devel gcc openssl-devel libffi-devel
+
+# Install PHP and web server
+yum install -y httpd php php-pear
+
+# Install network and utility tools
+yum install -y wget curl vim net-tools subversion unzip
+```
+
+**⚠️ Note:** CentOS 7 comes with Python 2.7 by default, which is perfect for Monast.
+
+---
+
+## Step 5: Install Python Dependencies
+
+### Install pip for Python 2.7:
+
+    # Method 1: Try yum first
+    sudo yum install -y python-pip
+
+    # Method 2: If yum doesn't work, install manually
+    curl https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
+
+    python get-pip.py
+
+### Install Python packages:
+
+    # Install Twisted Python framework
+    pip install twisted
+
+    # Install zope.interface
+    pip install zope.interface
+
+    # Verify installations
+    python -c "import twisted; print twisted.__version__"
+
+    python -c "import zope.interface; print zope.interface.__version__"
+
+**💡 Tip:** If you get SSL errors, add `--trusted-host pypi.org --trusted-host files.pythonhosted.org` to pip commands.
+
+---
+
+## Step 6: Install Starpy
+
+### Download and install from SourceForge:
+
+    cd /tmp
+
+    # Download Starpy from SourceForge
+    wget https://sourceforge.net/projects/starpy/files/latest/download -O starpy.tar.gz
+
+    # Extract and install
+    tar -xzf starpy.tar.gz
+
+    cd starpy-*
+
+    python setup.py install
+
+    # Verify installation
+    python -c "import starpy; print 'Starpy installed successfully'"
+
+**⚠️ Alternative:** If SourceForge download fails:
+
+    # Use SVN to get latest trunk
+    svn export http://starpy.svn.sourceforge.net/svnroot/starpy/trunk starpy-trunk
+
+    cd starpy-trunk
+
+    python setup.py install
+
+---
+
+## Step 7: Install PEAR Dependencies
+
+### Install HTTP_Client and dependencies:
+
+    # Install via PEAR (will show deprecation warnings - this is normal)
+    pear install HTTP_Client HTTP_Request Net_Socket Net_URL
+
+    # Verify PEAR packages
+    pear list
+
+    # Test PHP can find HTTP_Client
+    php -r 'require_once "HTTP/Client.php"; echo "HTTP_Client found\n";'
+
+### If PEAR installation fails, install manually:
+
+    # Download PEAR packages manually
+    cd /tmp
+
+    wget http://download.pear.php.net/package/HTTP_Client-1.2.1.tgz
+
+    wget http://download.pear.php.net/package/HTTP_Request-1.4.4.tgz
+
+    wget http://download.pear.php.net/package/Net_Socket-1.2.2.tgz
+
+    wget http://download.pear.php.net/package/Net_URL-1.0.15.tgz
+
+    # Extract and copy files
+    for package in *.tgz; do tar -xzf "$package"; done
+
+    mkdir -p /usr/share/pear/HTTP /usr/share/pear/Net
+
+    cp HTTP_Client-*/Client.php /usr/share/pear/HTTP/
+
+    cp HTTP_Request-*/Request.php /usr/share/pear/HTTP/
+
+    cp Net_Socket-*/Socket.php /usr/share/pear/Net/
+
+    cp Net_URL-*/URL.php /usr/share/pear/Net/
+
+---
+
+## Step 8: Install Monast
+
+### Download from GitHub:
+
+    cd /var/www/html
+
+    wget https://github.com/dagmoller/monast/archive/refs/heads/master.zip -O monast.zip
+
+    unzip monast.zip
+
+    mv monast-master monast
+
+    # Set proper permissions
+    chown -R apache:apache /var/www/html/monast
+
+    chmod -R 755 /var/www/html/monast
+
+**💡 Alternative:** Copy from `/tmp` if you downloaded it there:
+
+    # If you have pear.zip in /tmp
+    cd /tmp
+
+    unzip pear.zip
+
+    cp -r monast /var/www/html/
+
+---
+
+## Step 9: Configure and Start Services
+
+### Start Apache web server:
+
+    # Start Apache
+    /usr/sbin/httpd
+
+    # Create a simple test page
+    echo "<h1>Apache is running</h1>" > /var/www/html/index.html
+
+    # Test web server
+    curl localhost
+
+### Configure Monast:
+
+    cd /var/www/html/monast
+
+    cp config/config.ini.sample config/config.ini
+
+    # Edit configuration (optional)
+    vim config/config.ini
+
+---
+
+## Step 10: Access Monast
+
+### From your host machine:
+
+    # Open web browser and go to:
+    http://localhost:8080/monast/
+
+    # Or use curl to test:
+    curl http://localhost:8080/monast/
+
+### SSH access (optional):
+
+    # Inside container, set up SSH
+    yum install -y openssh-server
+
+    ssh-keygen -A
+
+    echo 'root:password123' | chpasswd
+
+    sed -i 's/#PermitRootLogin yes/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+    /usr/sbin/sshd
+
+    # From host machine:
+    ssh -p 2222 root@localhost
+    # Password: password123
+
+---
+
+## Troubleshooting Tips
+
+### 🔧 Common Issues:
+
+**Python module not found:**
+```bash
+# Check Python path
+python -c "import sys; print sys.path"
+
+# Reinstall missing modules
+pip install twisted zope.interface
+```
+
+**PEAR packages not found:**
+```bash
+# Check include path
+php -r "echo get_include_path();"
+
+# List installed packages
+pear list
+
+# Reinstall manually if needed (see Step 6)
+```
+
+**Port conflicts:**
+```bash
+# Check what's using ports
+netstat -tulpn | grep -E ":80|:8080|:2222"
+
+# Use different ports when running container
+docker run -d --name monast-server -p 9080:80 -p 2223:22 centos:7
+```
+
+**Container networking issues:**
+```bash
+# Get container IP
+docker inspect monast-server | grep IPAddress
+
+# Access directly via container IP
+curl http://172.17.0.2/monast/
+```
+
+### 📝 Useful Commands:
+
+```bash
+# Check container status
+docker ps -a
+
+# View container logs
+docker logs monast-server
+
+# Stop/start container
+docker stop monast-server
+docker start monast-server
+
+# Save container state
+docker commit monast-server monast-configured
+
+# Remove container
+docker rm monast-server
+```
+
+---
+
+## Final Notes
+
+- **Security:** Change default passwords in production
+- **Persistence:** Use Docker volumes for data that needs to persist
+- **Updates:** Regularly update packages for security
+- **Monitoring:** Check logs regularly for issues
+
+**🎉 Success!** You should now have Monast running in a CentOS 7 Docker container with all dependencies resolved.
